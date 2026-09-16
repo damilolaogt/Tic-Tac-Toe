@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tic-Tac-Toe</title>
+  <meta name="description" content="Play Tic-Tac-Toe against an unbeatable AI or a friend. Powered by Minimax with Alpha-Beta Pruning." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet" />
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d0f1a;
+      --surface:   #13162a;
+      --border:    rgba(255,255,255,0.07);
+      --x-color:   #e05cf7;
+      --o-color:   #3de8c3;
+      --neutral:   #8892b0;
+      --text:      #ccd6f6;
+      --glow-x:    0 0 22px rgba(224,92,247,0.55);
+      --glow-o:    0 0 22px rgba(61,232,195,0.55);
+      --radius:    18px;
+      --cell-size: min(28vw, 140px);
+    }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background:
+        radial-gradient(ellipse 60% 50% at 20% 30%, rgba(224,92,247,0.08) 0%, transparent 70%),
+        radial-gradient(ellipse 60% 50% at 80% 70%, rgba(61,232,195,0.07) 0%, transparent 70%);
+      pointer-events: none; z-index: 0;
+    }
+
+    /* ── Shared layout ── */
+    .screen {
+      position: relative; z-index: 1;
+      display: flex; flex-direction: column;
+      align-items: center; gap: 28px;
+      width: 100%; max-width: 480px;
+    }
+
+    .hidden { display: none !important; }
+
+    /* ── Mode-select screen ── */
+    .mode-hero { text-align: center; }
+
+    .mode-hero h1 {
+      font-size: clamp(2.4rem, 9vw, 3.4rem);
+      font-weight: 800; letter-spacing: -0.03em; line-height: 1.05;
+      background: linear-gradient(135deg, var(--x-color) 0%, var(--o-color) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .mode-hero p { margin-top: 8px; font-size: 0.95rem; color: var(--neutral); }
+
+    .mode-cards {
+      display: flex; gap: 16px; width: 100%;
+      flex-wrap: wrap; justify-content: center;
+    }
+
+    .mode-card {
+      flex: 1; min-width: 180px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      padding: 32px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .mode-card:hover {
+      transform: translateY(-5px);
+      border-color: rgba(255,255,255,0.2);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+    }
+
+    .mode-card:active { transform: translateY(-2px); }
+
+    .mode-card .icon { font-size: 3rem; margin-bottom: 14px; line-height: 1; }
+
+    .mode-card h2 {
+      font-size: 1.15rem; font-weight: 700; margin-bottom: 6px;
+    }
+
+    .mode-card p { font-size: 0.8rem; color: var(--neutral); line-height: 1.5; }
+
+    .mode-card.vs-ai  { border-color: rgba(224,92,247,0.2); }
+    .mode-card.vs-ai:hover  { border-color: rgba(224,92,247,0.55); box-shadow: 0 12px 40px rgba(224,92,247,0.15); }
+
+    .mode-card.vs-p2  { border-color: rgba(61,232,195,0.2); }
+    .mode-card.vs-p2:hover  { border-color: rgba(61,232,195,0.55); box-shadow: 0 12px 40px rgba(61,232,195,0.15); }
+
+    /* ── Game screen ── */
+    header { text-align: center; }
+
+    header h1 {
+      font-size: clamp(2rem, 8vw, 3rem);
+      font-weight: 800; letter-spacing: -0.03em; line-height: 1.1;
+      background: linear-gradient(135deg, var(--x-color) 0%, var(--o-color) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    header p { margin-top: 6px; font-size: 0.92rem; color: var(--neutral); }
+
+    /* ── Scores ── */
+    .scores { display: flex; gap: 12px; width: 100%; }
+
+    .score-card {
+      flex: 1; background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 14px 10px; text-align: center;
+    }
+
+    .score-card .label {
+      font-size: 0.72rem; font-weight: 600;
+      letter-spacing: 0.1em; text-transform: uppercase; color: var(--neutral);
+    }
+
+    .score-card .value { font-size: 2rem; font-weight: 800; line-height: 1.2; }
+
+    .score-card.p1   .value { color: var(--x-color); }
+    .score-card.draw .value { color: var(--neutral); }
+    .score-card.p2   .value { color: var(--o-color); }
+
+    /* ── Status ── */
+    .status {
+      font-size: 1.05rem; font-weight: 600; color: var(--text);
+      min-height: 28px; text-align: center; transition: color 0.3s;
+    }
+    .status.x-turn { color: var(--x-color); }
+    .status.o-turn { color: var(--o-color); }
+
+    /* ── Board ── */
+    .board {
+      display: grid;
+      grid-template-columns: repeat(3, var(--cell-size));
+      grid-template-rows:    repeat(3, var(--cell-size));
+      gap: 10px; justify-content: center;
+    }
+
+    .cell {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      width: var(--cell-size); height: var(--cell-size);
+      display: flex; align-items: center; justify-content: center;
+      font-size: calc(var(--cell-size) * 0.4); font-weight: 800;
+      cursor: pointer;
+      transition: transform 0.15s ease, border-color 0.2s, box-shadow 0.2s, background 0.2s;
+      user-select: none;
+    }
+
+    .cell:not(.taken):hover {
+      background: rgba(255,255,255,0.05);
+      border-color: rgba(255,255,255,0.18);
+      transform: scale(1.04);
+    }
+
+    .cell.taken { cursor: default; }
+
+    .cell.x {
+      color: var(--x-color); border-color: rgba(224,92,247,0.35);
+      box-shadow: var(--glow-x), inset 0 0 20px rgba(224,92,247,0.08);
+      animation: pop 0.22s cubic-bezier(.36,1.6,.5,1) both;
+    }
+
+    .cell.o {
+      color: var(--o-color); border-color: rgba(61,232,195,0.35);
+      box-shadow: var(--glow-o), inset 0 0 20px rgba(61,232,195,0.08);
+      animation: pop 0.22s cubic-bezier(.36,1.6,.5,1) both;
+    }
+
+    .cell.win-cell { animation: pulse-win 0.9s ease infinite alternate; }
+    .cell.win-cell.x { background: rgba(224,92,247,0.15); }
+    .cell.win-cell.o { background: rgba(61,232,195,0.15); }
+
+    @keyframes pop {
+      0%   { transform: scale(0.4); opacity: 0; }
+      100% { transform: scale(1);   opacity: 1; }
+    }
+    @keyframes pulse-win {
+      from { box-shadow: 0 0 18px rgba(255,255,255,0.25); }
+      to   { box-shadow: 0 0 36px rgba(255,255,255,0.55); }
+    }
+
+    /* ── Overlay ── */
+    .overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.65);
+      backdrop-filter: blur(8px);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 10; opacity: 0; pointer-events: none; transition: opacity 0.35s;
+    }
+    .overlay.show { opacity: 1; pointer-events: all; }
+
+    .result-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 28px; padding: 40px 48px;
+      text-align: center; max-width: 340px; width: 90%;
+      animation: slide-in 0.4s cubic-bezier(.36,1.4,.5,1) both;
+    }
+    @keyframes slide-in {
+      from { transform: translateY(40px) scale(0.9); opacity: 0; }
+      to   { transform: translateY(0)    scale(1);   opacity: 1; }
+    }
+    .result-emoji { font-size: 3.5rem; line-height: 1; margin-bottom: 12px; }
+    .result-title { font-size: 1.8rem; font-weight: 800; margin-bottom: 6px; }
+    .result-sub   { font-size: 0.9rem; color: var(--neutral); margin-bottom: 24px; }
+    .result-btns  { display: flex; flex-direction: column; gap: 10px; }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      gap: 8px; padding: 13px 28px; border: none; border-radius: 50px;
+      font-family: 'Outfit', sans-serif; font-size: 0.95rem; font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s, filter 0.15s;
+    }
+    .btn:hover  { transform: translateY(-2px); filter: brightness(1.1); }
+    .btn:active { transform: translateY(0);    filter: brightness(0.95); }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--x-color), var(--o-color));
+      color: #0d0f1a; box-shadow: 0 4px 20px rgba(224,92,247,0.3);
+    }
+    .btn-ghost {
+      background: transparent; border: 1px solid var(--border); color: var(--neutral);
+    }
+    .btn-ghost:hover { border-color: rgba(255,255,255,0.25); color: var(--text); }
+
+    .controls { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+
+    /* ── Footer ── */
+    footer { font-size: 0.75rem; color: var(--neutral); text-align: center; opacity: 0.7; }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════ MODE SELECT SCREEN ══════════════ -->
+<div class="screen" id="screen-mode">
+  <div class="mode-hero">
+    <h1>Tic-Tac-Toe</h1>
+    <p>Choose your game mode to get started</p>
+  </div>
+
+  <div class="mode-cards">
+    <div class="mode-card vs-ai" id="pick-ai" role="button" tabindex="0"
+         onclick="startGame('ai')" onkeydown="if(event.key==='Enter')startGame('ai')">
+      <div class="icon">🤖</div>
+      <h2>vs AI</h2>
+      <p>Face an unbeatable AI powered by Minimax &amp; Alpha-Beta Pruning</p>
+    </div>
+
+    <div class="mode-card vs-p2" id="pick-p2" role="button" tabindex="0"
+         onclick="startGame('p2')" onkeydown="if(event.key==='Enter')startGame('p2')">
+      <div class="icon">🧑‍🤝‍🧑</div>
+      <h2>2 Players</h2>
+      <p>Take turns on the same screen — pass and play with a friend</p>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ GAME SCREEN ══════════════ -->
+<div class="screen hidden" id="screen-game">
+
+  <header>
+    <h1>Tic-Tac-Toe</h1>
+    <p id="header-sub"></p>
+  </header>
+
+  <div class="scores">
+    <div class="score-card p1">
+      <div class="label" id="label-p1">Player 1 (X)</div>
+      <div class="value" id="score-x">0</div>
+    </div>
+    <div class="score-card draw">
+      <div class="label">Draws</div>
+      <div class="value" id="score-d">0</div>
+    </div>
+    <div class="score-card p2">
+      <div class="label" id="label-p2">Player 2 (O)</div>
+      <div class="value" id="score-o">0</div>
+    </div>
+  </div>
+
+  <div class="status x-turn" id="status">Your turn</div>
+
+  <div class="board" id="board">
+    <div class="cell" id="c0" role="button" aria-label="Cell 1" tabindex="0"></div>
+    <div class="cell" id="c1" role="button" aria-label="Cell 2" tabindex="0"></div>
+    <div class="cell" id="c2" role="button" aria-label="Cell 3" tabindex="0"></div>
+    <div class="cell" id="c3" role="button" aria-label="Cell 4" tabindex="0"></div>
+    <div class="cell" id="c4" role="button" aria-label="Cell 5" tabindex="0"></div>
+    <div class="cell" id="c5" role="button" aria-label="Cell 6" tabindex="0"></div>
+    <div class="cell" id="c6" role="button" aria-label="Cell 7" tabindex="0"></div>
+    <div class="cell" id="c7" role="button" aria-label="Cell 8" tabindex="0"></div>
+    <div class="cell" id="c8" role="button" aria-label="Cell 9" tabindex="0"></div>
+  </div>
+
+  <div class="controls">
+    <button class="btn btn-ghost" onclick="resetGame()">&#8635; New game</button>
+    <button class="btn btn-ghost" onclick="goToModeSelect()">&#8592; Change mode</button>
+  </div>
+
+  <footer id="footer-text"></footer>
+
+</div>
+
+<!-- ══════════════ RESULT OVERLAY ══════════════ -->
+<div class="overlay" id="overlay">
+  <div class="result-card">
+    <div class="result-emoji" id="res-emoji"></div>
+    <div class="result-title" id="res-title"></div>
+    <div class="result-sub"  id="res-sub"></div>
+    <div class="result-btns">
+      <button class="btn btn-primary" onclick="resetGame()">Play again</button>
+      <button class="btn btn-ghost"   onclick="goToModeSelect()">Change mode</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  /* ═══════════════════════════════════════════
+     Constants
+  ═══════════════════════════════════════════ */
+  const EMPTY = null, X = 'X', O = 'O';
+
+  const WIN_LINES = [
+    [0,1,2],[3,4,5],[6,7,8],
+    [0,3,6],[1,4,7],[2,5,8],
+    [0,4,8],[2,4,6]
+  ];
+
+  // Centre -> corners -> edges: maximises alpha-beta pruning cut-offs
+  const MOVE_ORDER = [4, 0, 2, 6, 8, 1, 3, 5, 7];
+
+  /* ═══════════════════════════════════════════
+     State
+  ═══════════════════════════════════════════ */
+  let board       = Array(9).fill(EMPTY);
+  let gameOver    = false;
+  let currentTurn = X;   // whose turn it is right now
+  let nextStarter = X;   // who goes FIRST in the upcoming game (alternates each round)
+  let mode        = 'ai';          // 'ai' | 'p2'
+  let scores      = { X: 0, O: 0, D: 0 };
+
+  /* ═══════════════════════════════════════════
+     AI — Minimax + Alpha-Beta Pruning
+  ═══════════════════════════════════════════ */
+
+  function checkWinner(b, player) {
+    return WIN_LINES.some(([a, c, d]) =>
+      b[a] === player && b[c] === player && b[d] === player
+    );
+  }
+
+  function isFull(b) { return b.every(c => c !== EMPTY); }
+
+  /**
+   * Minimax with alpha-beta pruning + move ordering.
+   * O = maximising (AI), X = minimising (human).
+   * Score: +10-depth (AI faster win), depth-10 (human win), 0 (draw).
+   */
+  function minimax(b, depth, isMax, alpha, beta) {
+    if (checkWinner(b, O)) return 10 - depth;
+    if (checkWinner(b, X)) return depth - 10;
+    if (isFull(b)) return 0;
+
+    if (isMax) {
+      let best = -Infinity;
+      for (const i of MOVE_ORDER) {
+        if (b[i] !== EMPTY) continue;
+        b[i] = O;
+        const score = minimax(b, depth + 1, false, alpha, beta);
+        b[i] = EMPTY;
+        best  = Math.max(best, score);
+        alpha = Math.max(alpha, score);
+        if (beta <= alpha) break; // beta cut-off
+      }
+      return best;
+    } else {
+      let best = Infinity;
+      for (const i of MOVE_ORDER) {
+        if (b[i] !== EMPTY) continue;
+        b[i] = X;
+        const score = minimax(b, depth + 1, true, alpha, beta);
+        b[i] = EMPTY;
+        best = Math.min(best, score);
+        beta = Math.min(beta, score);
+        if (beta <= alpha) break; // alpha cut-off
+      }
+      return best;
+    }
+  }
+
+  function findBestMove(b) {
+    // Collect ALL moves that share the best score, then pick one at random.
+    // This keeps the AI perfectly optimal (it never picks a suboptimal move)
+    // while preventing the repetitive, predictable sequence that a pure
+    // first-found search produces.
+    let bestScore = -Infinity;
+    let bestMoves = [];
+
+    for (const i of MOVE_ORDER) {
+      if (b[i] !== EMPTY) continue;
+      b[i] = O;
+      const score = minimax(b, 0, false, -Infinity, Infinity);
+      b[i] = EMPTY;
+      if (score > bestScore) {
+        bestScore = score;
+        bestMoves = [i];          // new best — reset candidate list
+      } else if (score === bestScore) {
+        bestMoves.push(i);        // tied — add to candidates
+      }
+    }
+
+    // Random pick among equally good moves
+    return bestMoves[Math.floor(Math.random() * bestMoves.length)];
+  }
+
+  /* ═══════════════════════════════════════════
+     Screen switching
+  ═══════════════════════════════════════════ */
+
+  function goToModeSelect() {
+    document.getElementById('screen-mode').classList.remove('hidden');
+    document.getElementById('screen-game').classList.add('hidden');
+    document.getElementById('overlay').classList.remove('show');
+    // Reset board but keep scores across mode changes
+    board       = Array(9).fill(EMPTY);
+    gameOver    = false;
+    currentTurn = X;
+  }
+
+  function startGame(selectedMode) {
+    mode = selectedMode;
+    // Reset scores and always let X/human go first in game 1
+    scores      = { X: 0, O: 0, D: 0 };
+    nextStarter = X;
+    updateScores();
+
+    document.getElementById('screen-mode').classList.add('hidden');
+    document.getElementById('screen-game').classList.remove('hidden');
+
+    // Update labels to match mode
+    if (mode === 'ai') {
+      document.getElementById('header-sub').innerHTML =
+        'You are <strong style="color:var(--x-color)">X</strong> &middot; AI is <strong style="color:var(--o-color)">O</strong>';
+      document.getElementById('label-p1').textContent = 'You (X)';
+      document.getElementById('label-p2').textContent = 'AI (O)';
+      document.getElementById('footer-text').innerHTML =
+        'AI uses <strong>Minimax + Alpha-Beta Pruning</strong> &mdash; it never loses.<br/>Best you can do is draw. Good luck!';
+    } else {
+      document.getElementById('header-sub').innerHTML =
+        '<strong style="color:var(--x-color)">Player 1</strong> is X &middot; <strong style="color:var(--o-color)">Player 2</strong> is O';
+      document.getElementById('label-p1').textContent = 'Player 1 (X)';
+      document.getElementById('label-p2').textContent = 'Player 2 (O)';
+      document.getElementById('footer-text').innerHTML =
+        'Pass &amp; play &mdash; take turns on the same device.<br/>The first move alternates each game.';
+    }
+
+    resetGame();
+  }
+
+  /* ═══════════════════════════════════════════
+     DOM helpers
+  ═══════════════════════════════════════════ */
+
+  function getCells() { return document.querySelectorAll('.cell'); }
+
+  function renderBoard() {
+    getCells().forEach((el, i) => {
+      el.textContent = board[i] ?? '';
+      el.className   = 'cell' + (board[i] ? ` ${board[i].toLowerCase()} taken` : '');
+    });
+  }
+
+  function setStatus(msg, cls) {
+    const el = document.getElementById('status');
+    el.textContent = msg;
+    el.className   = 'status ' + (cls || '');
+  }
+
+  function highlightWin(line) {
+    const cells = getCells();
+    line.forEach(i => cells[i].classList.add('win-cell'));
+  }
+
+  function showOverlay(emoji, title, sub) {
+    document.getElementById('res-emoji').textContent = emoji;
+    document.getElementById('res-title').textContent = title;
+    document.getElementById('res-sub').textContent   = sub;
+    document.getElementById('overlay').classList.add('show');
+  }
+
+  function updateScores() {
+    document.getElementById('score-x').textContent = scores.X;
+    document.getElementById('score-o').textContent = scores.O;
+    document.getElementById('score-d').textContent = scores.D;
+  }
+
+  function getWinLine(b, player) {
+    return WIN_LINES.find(([a, c, d]) =>
+      b[a] === player && b[c] === player && b[d] === player
+    ) ?? null;
+  }
+
+  /* ═══════════════════════════════════════════
+     Game logic
+  ═══════════════════════════════════════════ */
+
+  function endGame(winner) {
+    gameOver = true;
+
+    if (winner === X) {
+      const line = getWinLine(board, X);
+      if (line) highlightWin(line);
+      scores.X++;
+      updateScores();
+      const label = mode === 'ai' ? 'You Win!' : 'Player 1 Wins!';
+      const sub   = mode === 'ai' ? 'Impressive — you beat the AI!' : 'Well played, Player 1!';
+      setStatus(mode === 'ai' ? 'You win!' : 'Player 1 wins!', 'x-turn');
+      setTimeout(() => showOverlay('🎉', label, sub), 600);
+
+    } else if (winner === O) {
+      const line = getWinLine(board, O);
+      if (line) highlightWin(line);
+      scores.O++;
+      updateScores();
+      const label = mode === 'ai' ? 'AI Wins!' : 'Player 2 Wins!';
+      const sub   = mode === 'ai' ? 'The AI found the optimal line. Try again!' : 'Well played, Player 2!';
+      setStatus(mode === 'ai' ? 'AI wins!' : 'Player 2 wins!', 'o-turn');
+      setTimeout(() => showOverlay('🤖', label, sub), 600);
+
+    } else {
+      scores.D++;
+      updateScores();
+      setStatus("It's a draw!", '');
+      setTimeout(() => showOverlay('🤝', "It's a Draw!", 'So close! Nobody wins this round.'), 600);
+    }
+  }
+
+  function aiMove() {
+    if (gameOver) return;
+    setStatus('AI is thinking…', 'o-turn');
+    setTimeout(() => {
+      const idx = findBestMove(board);
+      if (idx === -1) return;
+      board[idx] = O;
+      renderBoard();
+      if (checkWinner(board, O)) { endGame(O); return; }
+      if (isFull(board))         { endGame(null); return; }
+      currentTurn = X;
+      setStatus('Your turn — pick a square', 'x-turn');
+    }, 180);
+  }
+
+  function handleCellClick(idx) {
+    if (gameOver || board[idx] !== EMPTY) return;
+
+    // In AI mode, only allow clicks when it's the human's (X's) turn
+    if (mode === 'ai' && currentTurn !== X) return;
+
+    board[idx] = currentTurn;
+    renderBoard();
+
+    if (checkWinner(board, currentTurn)) { endGame(currentTurn); return; }
+    if (isFull(board))                   { endGame(null); return; }
+
+    // Switch turn
+    if (mode === 'p2') {
+      currentTurn = currentTurn === X ? O : X;
+      const label = currentTurn === X ? 'Player 1\'s turn (X)' : 'Player 2\'s turn (O)';
+      setStatus(label, currentTurn === X ? 'x-turn' : 'o-turn');
+    } else {
+      // AI mode: let the AI move
+      currentTurn = O;
+      aiMove();
+    }
+  }
+
+  function resetGame() {
+    board       = Array(9).fill(EMPTY);
+    gameOver    = false;
+    currentTurn = nextStarter;   // use whoever's turn it is to start this game
+
+    // Flip starter for the NEXT game
+    nextStarter = nextStarter === X ? O : X;
+
+    document.getElementById('overlay').classList.remove('show');
+    renderBoard();
+
+    if (mode === 'ai') {
+      if (currentTurn === X) {
+        // Human goes first
+        setStatus('Your turn — pick a square', 'x-turn');
+      } else {
+        // AI goes first — trigger its move immediately
+        setStatus('AI goes first this round…', 'o-turn');
+        setTimeout(aiMove, 500);  // small delay so the board is visible first
+      }
+    } else {
+      // 2-player mode
+      if (currentTurn === X) {
+        setStatus("Player 1 goes first (X)", 'x-turn');
+      } else {
+        setStatus("Player 2 goes first (O)", 'o-turn');
+      }
+    }
+  }
+
+  /* ═══════════════════════════════════════════
+     Event wiring
+  ═══════════════════════════════════════════ */
+
+  getCells().forEach((el, i) => {
+    el.addEventListener('click',   () => handleCellClick(i));
+    el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') handleCellClick(i); });
+  });
+
+  // R = new game (only when game screen is active)
+  document.addEventListener('keydown', e => {
+    if (e.key.toLowerCase() === 'r' &&
+        !document.getElementById('screen-game').classList.contains('hidden')) {
+      resetGame();
+    }
+  });
+</script>
+</body>
+</html>
